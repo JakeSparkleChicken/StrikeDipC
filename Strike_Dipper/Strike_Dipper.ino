@@ -1,5 +1,4 @@
 #define Serial SERIAL_PORT_USBVIRTUAL
-
 #include <Adafruit_MPL3115A2.h> //Pressure+Temp library
 #include <Wire.h>               //I2C library for sensors
 #include <Arduino.h>
@@ -15,10 +14,7 @@
 #include <SPI.h>                //Used for SD Card
 #include <SD.h>                 //SD Card library
 #include <Adafruit_FeatherOLED.h>  //Additional Adafruit drivers for display
-
 const int chipSelect = 4;       //CS for built in SD card reader on Adalogger
-
-
 #define BUTTON_A 9
 #define BUTTON_B 6
 #define BUTTON_C 5
@@ -34,13 +30,11 @@ float dip = 0;
 float lon = 0;
 float lat = 0;
 float alt = 0;
-
-
 int prevButton = 0;                  //Needed for state preservation
 bool Fix = 1;                        //between button reads
 Adafruit_GPS GPS(&Serial1);          //GPS communicates with Feather M0
                                      //via Serial
-                                     
+uint32_t timer = millis();                                     
 
 /* Initialize sensors */
 void initSensors()  {
@@ -75,66 +69,47 @@ void setup(void)  {
   display.println("HeavyIndustries");
   delay(1000);
   display.display();
-  
   Serial.begin(115200);
   GPS.begin(9600);               //Set baud for Serial
   /* Set limited data from GPS and refresh rate */
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
   //useInterrupt(true);
   delay(1000);
 }
 
-/*  loop calls a sensor read and checks the buttons.  Left displays
- *  the GPS reading, right displays the strike and dip, up turns on
- *  the LCD backlight, down turns it off, and select writes the 
- *  data to the card.
- */
 void loop(void)
 {
     GPS.read();
     if (GPS.newNMEAreceived()) {
-    // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences! 
-    // so be very wary if using OUTPUT_ALLDATA and trytng to print out data
-    Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-  
-    if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
+      Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
+      if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
       return;  // we can fail to parse a sentence in which case we should just wait for another
     }
-    
     readSensors();
     displayInfo();
-
-    
-    
-  
+    if (!digitalRead(BUTTON_A)){
+      writeData();
+    }
 }
-
-
-
-
-uint32_t timer = millis();
 
 void displayInfo()
 {
-      display.clearDisplay();
+    display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
-
-    
-    
-      display.setCursor(0,0);
-      display.print("Lat: ");
-      display.print(GPS.latitudeDegrees, 4);
-      //display.print(lat);
-      display.println(" ");
-      display.print("Lon: "); 
-      display.print(GPS.longitudeDegrees, 4);
-      //display.print(lon);
-      
-     
-    
+    GPS.read();
+    if (GPS.newNMEAreceived()) {
+      Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
+      if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
+      return;  // we can fail to parse a sentence in which case we should just wait for another
+    }
+    display.setCursor(0,0);
+    display.print("Lat: ");
+    display.print(GPS.latitudeDegrees, 4);
+    display.println(" ");
+    display.print("Lon: "); 
+    display.print(GPS.longitudeDegrees, 4);
     display.println(" ");
     display.print("D:");
     display.print(dip);
@@ -145,9 +120,9 @@ void displayInfo()
     display.print("A:");
     display.print(alt);
     display.print("   Fix: ");
-    display.print(Fix);
+    display.print(GPS.fix);
     display.display();
-    delay(100);
+    //delay(100);
 }
 
 void readSensors()
@@ -162,70 +137,34 @@ void readSensors()
   mag.getEvent(&mag_event);
   if (dof.fusionGetOrientation(&accel_event, &mag_event, &orientation))
   {
+    dip = abs(orientation.roll);
+    alt = baro.getAltitude();
+  }
     if (orientation.heading < 0)
     {
-      adjHeading = 360 + orientation.heading;
+      adjHeading = abs(orientation.heading);
     }
-    else
-    {
-      adjHeading = orientation.heading;
+    else{
+      adjHeading = 360 - orientation.heading;
     }
-    
-    // in case you are not using the interrupt above, you'll
-  // need to 'hand query' the GPS, not suggested :(
-  
-    // read data from the GPS in the 'main loop'
-  
-    //char c = GPS.read();
-    
-    // if you want to debug, this is a good time to do it!
-  //  if (GPSECHO)
-  //if (c) Serial.print(c);
-  
-  
-  // if a sentence is received, we can check the checksum, parse it...
-  //if (GPS.newNMEAreceived()) {
-    // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences! 
-    // so be very wary if using OUTPUT_ALLDATA and trytng to print out data
-    //Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-  
-    //if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-     // return;  // we can fail to parse a sentence in which case we should just wait for another
- // }
-  //if (timer > millis())  timer = millis();
-
-  // approximately every 2 seconds or so, print out the current stats
-  //if (millis() - timer > 2000) { 
-  //  timer = millis();
-  }
-    /* 'orientation' should have valid .roll field 
-       pitch will be represented by Vubble Level*/
-    adjHeading = abs(360-adjHeading);
-    dip = abs(orientation.roll);
-    lat = GPS.latitudeDegrees;
-    lon = GPS.longitudeDegrees;
-    alt = baro.getAltitude();
-    Fix = GPS.fix;
-    //Serial.print(lat);
-    
-    
-  }
-//}
-
-
+}
 
 void writeData() {
   
-
- 
-  
-  //char data[80];
-  //sprintf(data, GPS.year, ",", GPS.month, ",", GPS.day, ",", GPS.hour, ",", GPS.minute, ",", GPS.seconds, ",", lat, ",", lon, ",", alt, ",", dip, ",", adjHeading);
+  if (!SD.begin(chipSelect)) {
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Card init. failed!");
+    display.display();
+    delay(2000);
+  }
   File dataFile = SD.open("datalog.txt", FILE_WRITE);
-
   // if the file is available, write to it:
   if (dataFile) {
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Writing...");
+    display.display();
     dataFile.print(GPS.year);
     dataFile.print(",");
     dataFile.print(GPS.month);
@@ -238,9 +177,9 @@ void writeData() {
     dataFile.print(",");
     dataFile.print(GPS.seconds);
     dataFile.print(",");
-    dataFile.print(lat);
+    dataFile.print(GPS.latitudeDegrees);
     dataFile.print(",");
-    dataFile.print(lon);
+    dataFile.print(GPS.longitudeDegrees);
     dataFile.print(",");
     dataFile.print(alt);
     dataFile.print(",");
@@ -248,12 +187,15 @@ void writeData() {
     dataFile.print(",");
     dataFile.println(adjHeading);
     dataFile.close();
-    // print to the serial port too:
-    //lcd.print(data);
+    delay(1000);
   }
 //   if the file isn't open, pop up an error:
   else {
-    
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Can't open file!");
+    display.display();
+    delay(2000);
   }
   
 }
