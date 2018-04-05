@@ -1,0 +1,20 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=StrikeAndDip
+*Date=08:22:14
+*CreatedBy=Fritzing 0.9.3b.04.19.5c895d327c44a3114e5fcc9d8260daf0cbb52806
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;;37.8178;-21.899;0;Bottom;9DOF
+2;;;58.3796;-47.299;0;Bottom;
+3;;;9.87778;-23.169;-180;Bottom;Altimeter
+4;;;68.2978;-17.1285;-180;Bottom;GPS
+5;;;62.484;-28.6046;0;Bottom;Via1
