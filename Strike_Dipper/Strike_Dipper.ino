@@ -34,8 +34,8 @@ int prevButton = 0;                  //Needed for state preservation
 bool Fix = 1;                        //between button reads
 Adafruit_GPS GPS(&Serial1);          //GPS communicates with Feather M0
                                      //via Serial
-uint32_t timer = millis();                                     
-
+//uint32_t timer = millis();                                     
+volatile static bool triggered;
 /* Initialize sensors */
 void initSensors()  {
   if(!accel.begin())
@@ -56,8 +56,8 @@ void initSensors()  {
 
 void setup(void)  {
   initSensors();  //Initialize sensors
-  uint16_t time = millis();
-  time = millis() - time;
+  //uint16_t time = millis();
+  //time = millis() - time;
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  //Initialize display
   display.display();
   delay(1000);
@@ -73,37 +73,51 @@ void setup(void)  {
   GPS.begin(9600);               //Set baud for Serial
   /* Set limited data from GPS and refresh rate */
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
   //useInterrupt(true);
   delay(1000);
+  pinMode(10,INPUT);
+  attachInterrupt(10,ISR,FALLING);
 }
 
 void loop(void)
 {
-    GPS.read();
-    if (GPS.newNMEAreceived()) {
-      Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-      if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      return;  // we can fail to parse a sentence in which case we should just wait for another
-    }
-    readSensors();
-    displayInfo();
-    if (!digitalRead(BUTTON_A)){
-      writeData();
-    }
+    //GPS.read();
+    //if (GPS.newNMEAreceived()) {
+      //Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
+      //if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
+      //return;  // we can fail to parse a sentence in which case we should just wait for another
+    //}
+   
+    //readSensors();
+    //displayInfo();
+    //if (!digitalRead(BUTTON_A)){
+    //  writeData();
+    //}
+
+    if(triggered){
+      readSensors();
+      displayInfo();
+      if (!digitalRead(BUTTON_A)){
+        writeData();
+      }
+    triggered = false; // reset flag
+    attachInterrupt(10,ISR,FALLING); // enable interrupt for next serial activity
+  }  
 }
+
+void ISR(){
+  detachInterrupt(10);// else interrupt would trigger for every bit of RS232 Transmision
+  triggered=true;
+  GPS.read();
+  }
 
 void displayInfo()
 {
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
-    GPS.read();
-    if (GPS.newNMEAreceived()) {
-      Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-      if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      return;  // we can fail to parse a sentence in which case we should just wait for another
-    }
+    
     display.setCursor(0,0);
     display.print("Lat: ");
     display.print(GPS.latitudeDegrees, 4);
@@ -127,6 +141,12 @@ void displayInfo()
 
 void readSensors()
 {
+  
+    if (GPS.newNMEAreceived()) {
+      Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
+      if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
+      return;  // we can fail to parse a sentence in which case we should just wait for another
+    }
   sensors_event_t accel_event;
   sensors_event_t mag_event;
   sensors_vec_t   orientation;
