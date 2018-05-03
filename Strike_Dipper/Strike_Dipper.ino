@@ -1,4 +1,5 @@
-#define Serial SERIAL_PORT_USBVIRTUAL
+#define Serial SERIAL_PORT_USBVIRTUAL     
+#include <Adafruit_GPS.h>
 #include <Adafruit_MPL3115A2.h> //Pressure+Temp library
 #include <Wire.h>               //I2C library for sensors
 #include <Arduino.h>
@@ -10,7 +11,6 @@
 #include <Adafruit_SSD1306.h>   //Adafruit OLED library
 #include <Adafruit_GFX.h>       // Core graphics library
 #include <gfxfont.h>            //Core font library
-#include <Adafruit_GPS.h>       //GPS library 
 #include <SPI.h>                //Used for SD Card
 #include <SD.h>                 //SD Card library
 #include <Adafruit_FeatherOLED.h>  //Additional Adafruit drivers for display
@@ -18,8 +18,6 @@ const int chipSelect = 4;       //CS for built in SD card reader on Adalogger
 #define BUTTON_A 9
 #define BUTTON_B 6
 #define BUTTON_C 5
-#define LED      13
-/* Assign a unique ID to the sensors and display*/
 Adafruit_9DOF                 dof   = Adafruit_9DOF();
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(30301);
 Adafruit_LSM303_Mag_Unified   mag   = Adafruit_LSM303_Mag_Unified(30302);
@@ -30,13 +28,80 @@ float dip = 0;
 float lon = 0;
 float lat = 0;
 float alt = 0;
-int prevButton = 0;                  //Needed for state preservation
-bool Fix = 1;                        //between button reads
-Adafruit_GPS GPS(&Serial1);          //GPS communicates with Feather M0
-                                     //via Serial
-//uint32_t timer = millis();                                     
-volatile static bool triggered;
-/* Initialize sensors */
+
+
+#define GPSSerial Serial1
+
+// Connect to the GPS on the hardware port
+Adafruit_GPS GPS(&GPSSerial);
+
+
+uint32_t timer = millis();
+
+
+void setup()
+{
+  
+  Serial.begin(115200);
+  Serial.println("Adafruit GPS library basic test!");
+       
+  GPS.begin(9600);
+  
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+  
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
+  
+  GPS.sendCommand(PGCMD_ANTENNA);
+  initSensors();
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  //Initialize display
+  display.display();
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0,0);
+  display.println("SparkleChicken");
+  display.println("HeavyIndustries");
+  delay(1000);
+  display.display();
+  delay(1000);
+  
+  
+  
+  // Ask for firmware version
+  GPSSerial.println(PMTK_Q_RELEASE);
+}
+
+void loop() // run over and over again
+{
+  char c = GPS.read();
+  
+  if (GPS.newNMEAreceived()) {
+    
+    if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
+      return; // we can fail to parse a sentence in which case we should just wait for another
+  }
+  if (timer > millis()) timer = millis();
+     
+  if (millis() - timer > 1000) {
+    timer = millis(); // reset the timer
+    readSensors();
+    if (!digitalRead(BUTTON_A)){
+        writeData();
+      }
+    if (GPS.fix) {
+      lon = GPS.longitudeDegrees;
+      lat = GPS.latitudeDegrees;
+      readSensors();
+      if (!digitalRead(BUTTON_A)){
+        writeData();
+      }
+    }
+  }
+  
+  
+  
+}
+
 void initSensors()  {
   if(!accel.begin())
   {
@@ -54,99 +119,10 @@ void initSensors()  {
      }
 }
 
-void setup(void)  {
-  initSensors();  //Initialize sensors
-  //uint16_t time = millis();
-  //time = millis() - time;
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  //Initialize display
-  display.display();
-  delay(1000);
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.println("SparkleChicken");
-  display.println("HeavyIndustries");
-  delay(1000);
-  display.display();
-  Serial.begin(115200);
-  GPS.begin(9600);               //Set baud for Serial
-  /* Set limited data from GPS and refresh rate */
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
-  //useInterrupt(true);
-  delay(1000);
-  pinMode(10,INPUT);
-  attachInterrupt(10,ISR,FALLING);
-}
-
-void loop(void)
-{
-    //GPS.read();
-    //if (GPS.newNMEAreceived()) {
-      //Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-      //if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      //return;  // we can fail to parse a sentence in which case we should just wait for another
-    //}
-   
-    //readSensors();
-    //displayInfo();
-    //if (!digitalRead(BUTTON_A)){
-    //  writeData();
-    //}
-
-    if(triggered){
-      readSensors();
-      displayInfo();
-      if (!digitalRead(BUTTON_A)){
-        writeData();
-      }
-    triggered = false; // reset flag
-    attachInterrupt(10,ISR,FALLING); // enable interrupt for next serial activity
-  }  
-}
-
-void ISR(){
-  detachInterrupt(10);// else interrupt would trigger for every bit of RS232 Transmision
-  triggered=true;
-  GPS.read();
-  }
-
-void displayInfo()
-{
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    
-    display.setCursor(0,0);
-    display.print("Lat: ");
-    display.print(GPS.latitudeDegrees, 4);
-    display.println(" ");
-    display.print("Lon: "); 
-    display.print(GPS.longitudeDegrees, 4);
-    display.println(" ");
-    display.print("D:");
-    display.print(dip);
-    display.print(" ");
-    display.print("S:");
-    display.print(adjHeading);
-    display.println(" ");
-    display.print("A:");
-    display.print(alt);
-    display.print("   Fix: ");
-    display.print(GPS.fix);
-    display.display();
-    //delay(100);
-}
-
 void readSensors()
 {
   
-    if (GPS.newNMEAreceived()) {
-      Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-      if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      return;  // we can fail to parse a sentence in which case we should just wait for another
-    }
+    
   sensors_event_t accel_event;
   sensors_event_t mag_event;
   sensors_vec_t   orientation;
@@ -167,6 +143,26 @@ void readSensors()
     else{
       adjHeading = 360 - orientation.heading;
     }
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    
+    display.setCursor(0,0);
+    display.print("Lat: ");
+    display.print(lat, 5);
+    display.println(" ");
+    display.print("Lon: "); 
+    display.print(lon, 5);
+    display.println(" ");
+    display.print("D:");
+    display.print(dip);
+    display.print(" ");
+    display.print("S:");
+    display.print(adjHeading);
+    display.println(" ");
+    display.print("A:");
+    display.print(alt);
+    display.display();
 }
 
 void writeData() {
@@ -217,6 +213,5 @@ void writeData() {
     display.display();
     delay(2000);
   }
-  
 }
 
