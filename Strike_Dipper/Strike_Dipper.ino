@@ -67,8 +67,10 @@ void setup()
   
   
   
+  
   // Ask for firmware version
   GPSSerial.println(PMTK_Q_RELEASE);
+  attachInterrupt(9, writeData, RISING);
 }
 
 void loop() // run over and over again
@@ -85,22 +87,22 @@ void loop() // run over and over again
   if (millis() - timer > 1000) {
     timer = millis(); // reset the timer
     readSensors();
-    if (!digitalRead(BUTTON_A)){
-        writeData();
-      }
     if (GPS.fix) {
       lon = GPS.longitudeDegrees;
       lat = GPS.latitudeDegrees;
       readSensors();
-      if (!digitalRead(BUTTON_A)){
-        writeData();
       }
-    }
   }
   
   
   
 }
+
+void ISR()
+  {
+    detachInterrupt(9);
+    writeData();
+  }
 
 void initSensors()  {
   if(!accel.begin())
@@ -166,13 +168,13 @@ void readSensors()
 }
 
 void writeData() {
-  
+  detachInterrupt(9);
   if (!SD.begin(chipSelect)) {
     display.clearDisplay();
     display.setCursor(0,0);
     display.println("Card init. failed!");
     display.display();
-    delay(2000);
+    exit;
   }
   File dataFile = SD.open("datalog.txt", FILE_WRITE);
   // if the file is available, write to it:
@@ -203,7 +205,6 @@ void writeData() {
     dataFile.print(",");
     dataFile.println(adjHeading);
     dataFile.close();
-    delay(1000);
   }
 //   if the file isn't open, pop up an error:
   else {
@@ -211,7 +212,7 @@ void writeData() {
     display.setCursor(0,0);
     display.println("Can't open file!");
     display.display();
-    delay(2000);
-  }
+    }
+  attachInterrupt(9, ISR, RISING);
 }
 
