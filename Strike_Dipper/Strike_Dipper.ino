@@ -28,7 +28,7 @@ float dip = 0;
 float lon = 0;
 float lat = 0;
 float alt = 0;
-
+float adjHeading_for_real = 0;
 
 #define GPSSerial Serial1
 
@@ -37,7 +37,7 @@ Adafruit_GPS GPS(&GPSSerial);
 
 
 uint32_t timer = millis();
-
+uint8_t pressnumber = 2;
 
 void setup()
 {
@@ -101,7 +101,7 @@ void loop() // run over and over again
 void ISR()
   {
     detachInterrupt(9);
-    writeData();
+    buttonPress();
   }
 
 void initSensors()  {
@@ -195,15 +195,15 @@ void writeData() {
     dataFile.print(",");
     dataFile.print(GPS.seconds);
     dataFile.print(",");
-    dataFile.print(GPS.latitudeDegrees);
+    dataFile.print(lat, 5);
     dataFile.print(",");
-    dataFile.print(GPS.longitudeDegrees);
+    dataFile.print(lon, 5);
     dataFile.print(",");
     dataFile.print(alt);
     dataFile.print(",");
     dataFile.print(dip);
     dataFile.print(",");
-    dataFile.println(adjHeading);
+    dataFile.println(adjHeading_for_real);
     dataFile.close();
   }
 //   if the file isn't open, pop up an error:
@@ -213,6 +213,19 @@ void writeData() {
     display.println("Can't open file!");
     display.display();
     }
+  attachInterrupt(9, ISR, RISING);
+}
+
+void buttonPress() {
+  if (pressnumber % 2 == 0)
+  {
+    adjHeading_for_real = adjHeading;
+  }
+  else
+  {
+    writeData();
+  }
+  pressnumber++;
   attachInterrupt(9, ISR, RISING);
 }
 
